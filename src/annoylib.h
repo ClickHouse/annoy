@@ -1207,6 +1207,8 @@ protected:
           annoylib_showUpdate("File truncation error\n");
     } else {
       _nodes = realloc(_nodes, _s * new_nodes_size);
+      if (!_nodes)
+          throw std::bad_alloc();
       memset((char *) _nodes + (_nodes_size * _s) / sizeof(char), 0, (new_nodes_size - _nodes_size) * _s);
     }
     
