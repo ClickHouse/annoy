@@ -1207,6 +1207,8 @@ protected:
           annoylib_showUpdate("File truncation error\n");
     } else {
       _nodes = realloc(_nodes, _s * new_nodes_size);
+      if (!_nodes)
+          throw std::bad_alloc();
       memset((char *) _nodes + (_nodes_size * _s) / sizeof(char), 0, (new_nodes_size - _nodes_size) * _s);
     }
     
@@ -1217,7 +1219,12 @@ protected:
   void _allocate_size(S n, ThreadedBuildPolicy& threaded_build_policy) {
     if (n > _nodes_size) {
       threaded_build_policy.lock_nodes();
-      _reallocate_nodes(n);
+      try {
+        _reallocate_nodes(n);
+      } catch (const std::exception& e) {
+        threaded_build_policy.unlock_nodes();
+        throw e;
+      }
       threaded_build_policy.unlock_nodes();
     }
   }
@@ -1250,7 +1257,12 @@ protected:
 
     if (indices.size() <= (size_t)_K && (!is_root || (size_t)_n_items <= (size_t)_K || indices.size() == 1)) {
       threaded_build_policy.lock_n_nodes();
-      _allocate_size(_n_nodes + 1, threaded_build_policy);
+      try {
+          _allocate_size(_n_nodes + 1, threaded_build_policy);
+      } catch (const std::exception& e) {
+        threaded_build_policy.unlock_n_nodes();
+        throw e;
+      }
       S item = _n_nodes++;
       threaded_build_policy.unlock_n_nodes();
 
@@ -1331,7 +1343,12 @@ protected:
     }
 
     threaded_build_policy.lock_n_nodes();
-    _allocate_size(_n_nodes + 1, threaded_build_policy);
+    try {
+      _allocate_size(_n_nodes + 1, threaded_build_policy);
+    } catch (const std::exception& e) {
+      threaded_build_policy.unlock_n_nodes();
+      throw e;
+    }
     S item = _n_nodes++;
     threaded_build_policy.unlock_n_nodes();
 
