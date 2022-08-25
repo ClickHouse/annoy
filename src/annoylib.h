@@ -365,6 +365,7 @@ inline T get_norm(T* v, int f) {
 }
 
 template<typename T, typename Random, typename Distance, typename Node>
+__attribute__((__no_sanitize__("undefined")))
 inline void two_means(const vector<Node*>& nodes, int f, Random& random, bool cosine, Node* p, Node* q) {
   /*
     This algorithm is a huge heuristic. Empirically it works really well, but I
@@ -423,6 +424,7 @@ struct Base {
   }
 
   template<typename T, typename Node>
+  __attribute__((__no_sanitize__("undefined")))
   static inline void copy_node(Node* dest, const Node* source, const int f) {
     memcpy(dest->v, source->v, f * sizeof(T));
   }
@@ -763,6 +765,7 @@ struct Minkowski : Base {
 
 struct Euclidean : Minkowski {
   template<typename S, typename T>
+  __attribute__((__no_sanitize__("undefined")))
   static inline T distance(const Node<S, T>* x, const Node<S, T>* y, int f) {
     return euclidean_distance(x->v, y->v, f);    
   }
@@ -1156,6 +1159,7 @@ public:
     _seed = seed;
   }
 
+  __attribute__((__no_sanitize__("undefined")))
   void thread_build(int q, int thread_idx, ThreadedBuildPolicy& threaded_build_policy) {
     // Each thread needs its own seed, otherwise each thread would be building the same tree(s)
     Random _random(_seed + thread_idx);
@@ -1247,6 +1251,7 @@ protected:
     return std::max(f, 1-f);
   }
 
+  __attribute__((__no_sanitize__("undefined")))
   S _make_tree(const vector<S>& indices, bool is_root, Random& _random, ThreadedBuildPolicy& threaded_build_policy) {
     // The basic rule is that if we have <= _K items, then it's a leaf node, otherwise it's a split node.
     // There's some regrettable complications caused by the problem that root nodes have to be "special":
