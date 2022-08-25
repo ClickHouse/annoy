@@ -905,6 +905,7 @@ public:
   }
 
   template<typename W>
+  __attribute__((__no_sanitize__("undefined")))
   bool add_item_impl(S item, const W& w, char** error=NULL) {
     if (_loaded) {
       set_error_from_string(error, "You can't add an item to a loaded index");
