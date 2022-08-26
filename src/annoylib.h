@@ -1365,6 +1365,7 @@ protected:
     return item;
   }
 
+  __attribute__((__no_sanitize__("undefined")))
   void _get_all_nns(const T* v, size_t n, int search_k, vector<S>* result, vector<T>* distances) const {
     Node* v_node = (Node *)alloca(_s);
     D::template zero_value<Node>(v_node);
