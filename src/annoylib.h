@@ -1292,6 +1292,7 @@ protected:
 
     vector<S> children_indices[2];
     Node* m = (Node*)alloca(_s);
+    memset(m, 0, _s);
 
     for (int attempt = 0; attempt < 3; attempt++) {
       children_indices[0].clear();
