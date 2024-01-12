@@ -13,42 +13,17 @@
 // the License.
 
 
-#ifndef ANNOY_ANNOYLIB_H
-#define ANNOY_ANNOYLIB_H
+#pragma once
 
 #include <stdio.h>
 #include <sys/stat.h>
-#ifndef _MSC_VER
 #include <unistd.h>
-#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
 #include <fcntl.h>
 #include <stddef.h>
-
-#if defined(_MSC_VER) && _MSC_VER == 1500
-typedef unsigned char     uint8_t;
-typedef signed __int32    int32_t;
-typedef unsigned __int64  uint64_t;
-typedef signed __int64    int64_t;
-#else
 #include <stdint.h>
-#endif
-
-#if defined(_MSC_VER) || defined(__MINGW32__)
- // a bit hacky, but override some definitions to support 64 bit
- #define off_t int64_t
- #define lseek_getsize(fd) _lseeki64(fd, 0, SEEK_END)
- #ifndef NOMINMAX
-  #define NOMINMAX
- #endif
- #include "mman.h"
- #include <windows.h>
-#else
- #include <sys/mman.h>
- #define lseek_getsize(fd) lseek(fd, 0, SEEK_END)
-#endif
 
 #include <cerrno>
 #include <string.h>
@@ -58,20 +33,11 @@ typedef signed __int64    int64_t;
 #include <queue>
 #include <limits>
 
-#if __cplusplus >= 201103L
 #include <type_traits>
-#endif
 
-#ifdef ANNOYLIB_MULTITHREADED_BUILD
 #include <thread>
 #include <mutex>
 #include <shared_mutex>
-#endif
-
-#ifdef _MSC_VER
-// Needed for Visual Studio to disable runtime checks for mempcy
-#pragma runtime_checks("s", off)
-#endif
 
 // This allows others to supply their own logger / error printer without
 // requiring Annoy to import their headers. See RcppAnnoy for a use case.
@@ -95,11 +61,7 @@ typedef signed __int64    int64_t;
 // Compilers need *some* size defined for the v array, and some memory checking tools will flag for buffer overruns if this is set too low.
 #define ANNOYLIB_V_ARRAY_SIZE 65536
 
-#ifndef _MSC_VER
 #define annoylib_popcount __builtin_popcountll
-#else // See #293, #358
-#define annoylib_popcount cole_popcount
-#endif
 
 #if !defined(NO_MANUAL_VECTORIZATION) && defined(__GNUC__) && (__GNUC__ >6) && defined(__AVX512F__)  // See #402
 #define ANNOYLIB_USE_AVX512
@@ -109,18 +71,10 @@ typedef signed __int64    int64_t;
 #endif
 
 #if defined(ANNOYLIB_USE_AVX) || defined(ANNOYLIB_USE_AVX512)
-#if defined(_MSC_VER)
-#include <intrin.h>
-#elif defined(__GNUC__)
 #include <x86intrin.h>
 #endif
-#endif
 
-#if !defined(__MINGW32__)
 #define ANNOYLIB_FTRUNCATE_SIZE(x) static_cast<int64_t>(x)
-#else
-#define ANNOYLIB_FTRUNCATE_SIZE(x) (x)
-#endif
 
 namespace Annoy {
 
@@ -146,21 +100,6 @@ using std::pair;
 using std::numeric_limits;
 using std::make_pair;
 
-inline bool remap_memory_and_truncate(void** _ptr, int _fd, size_t old_size, size_t new_size) {
-#ifdef __linux__
-    *_ptr = mremap(*_ptr, old_size, new_size, MREMAP_MAYMOVE);
-    bool ok = ftruncate(_fd, new_size) != -1;
-#else
-    munmap(*_ptr, old_size);
-    bool ok = ftruncate(_fd, ANNOYLIB_FTRUNCATE_SIZE(new_size)) != -1;
-#ifdef MAP_POPULATE
-    *_ptr = mmap(*_ptr, new_size, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_POPULATE, _fd, 0);
-#else
-    *_ptr = mmap(*_ptr, new_size, PROT_READ | PROT_WRITE, MAP_SHARED, _fd, 0);
-#endif
-#endif
-    return ok;
-}
 
 namespace {
 
@@ -830,9 +769,7 @@ class AnnoyIndexInterface {
   virtual bool add_item(S item, const T* w, char** error=NULL) = 0;
   virtual bool build(int q, int n_threads=-1, char** error=NULL) = 0;
   virtual bool unbuild(char** error=NULL) = 0;
-  virtual bool save(const char* filename, bool prefault=false, char** error=NULL) = 0;
   virtual void unload() = 0;
-  virtual bool load(const char* filename, bool prefault=false, char** error=NULL) = 0;
   virtual T get_distance(S i, S j) const = 0;
   virtual void get_nns_by_item(S item, size_t n, int search_k, vector<S>* result, vector<T>* distances) const = 0;
   virtual void get_nns_by_vector(const T* w, size_t n, int search_k, vector<S>* result, vector<T>* distances) const = 0;
@@ -841,17 +778,12 @@ class AnnoyIndexInterface {
   virtual void verbose(bool v) = 0;
   virtual void get_item(S item, T* v) const = 0;
   virtual void set_seed(R q) = 0;
-  virtual bool on_disk_build(const char* filename, char** error=NULL) = 0;
 };
 
 template<typename S, typename T, typename Distance, typename Random, class ThreadedBuildPolicy>
   class AnnoyIndex : public AnnoyIndexInterface<S, T, 
-#if __cplusplus >= 201103L
-    typename std::remove_const<decltype(Random::default_seed)>::type
-#else
-    typename Random::seed_type
-#endif
-    > {
+    typename std::remove_const<decltype(Random::default_seed)>::type>
+{
   /*
    * We use random projection to build a forest of binary trees of all items.
    * Basically just split the hyperspace into two sides by a hyperplane,
@@ -862,11 +794,7 @@ template<typename S, typename T, typename Distance, typename Random, class Threa
 public:
   typedef Distance D;
   typedef typename D::template Node<S, T> Node;
-#if __cplusplus >= 201103L
   typedef typename std::remove_const<decltype(Random::default_seed)>::type R;
-#else
-  typedef typename Random::seed_type R;
-#endif
 
 protected:
   const uint64_t _f;
@@ -880,8 +808,6 @@ protected:
   R _seed;
   bool _loaded;
   bool _verbose;
-  int _fd;
-  bool _on_disk;
   bool _built;
 public:
 
@@ -930,27 +856,6 @@ public:
     return true;
   }
     
-  bool on_disk_build(const char* file, char** error=NULL) {
-    _on_disk = true;
-    _fd = open(file, O_RDWR | O_CREAT | O_TRUNC, (int) 0600);
-    if (_fd == -1) {
-      set_error_from_errno(error, "Unable to open");
-      _fd = 0;
-      return false;
-    }
-    _nodes_size = 1;
-    if (ftruncate(_fd, ANNOYLIB_FTRUNCATE_SIZE(_s) * ANNOYLIB_FTRUNCATE_SIZE(_nodes_size)) == -1) {
-      set_error_from_errno(error, "Unable to truncate");
-      return false;
-    }
-#ifdef MAP_POPULATE
-    _nodes = (Node*) mmap(0, _s * _nodes_size, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_POPULATE, _fd, 0);
-#else
-    _nodes = (Node*) mmap(0, _s * _nodes_size, PROT_READ | PROT_WRITE, MAP_SHARED, _fd, 0);
-#endif
-    return true;
-  }
-    
   bool build(int q, int n_threads=-1, char** error=NULL) {
     if (_loaded) {
       set_error_from_string(error, "You can't build a loaded index");
@@ -977,16 +882,6 @@ public:
 
     if (_verbose) annoylib_showUpdate("has %d nodes\n", _n_nodes);
     
-    if (_on_disk) {
-      if (!remap_memory_and_truncate(&_nodes, _fd,
-          static_cast<size_t>(_s) * static_cast<size_t>(_nodes_size),
-          static_cast<size_t>(_s) * static_cast<size_t>(_n_nodes))) {
-        // TODO: this probably creates an index in a corrupt state... not sure what to do
-        set_error_from_errno(error, "Unable to truncate");
-        return false;
-      }
-      _nodes_size = _n_nodes;
-    }
     _built = true;
     return true;
   }
@@ -1004,119 +899,23 @@ public:
     return true;
   }
 
-  bool save(const char* filename, bool prefault=false, char** error=NULL) {
-    if (!_built) {
-      set_error_from_string(error, "You can't save an index that hasn't been built");
-      return false;
-    }
-    if (_on_disk) {
-      return true;
-    } else {
-      // Delete file if it already exists (See issue #335)
-      unlink(filename);
-
-      FILE *f = fopen(filename, "wb");
-      if (f == NULL) {
-        set_error_from_errno(error, "Unable to open");
-        return false;
-      }
-
-      if (fwrite(_nodes, _s, _n_nodes, f) != (size_t) _n_nodes) {
-        set_error_from_errno(error, "Unable to write");
-        return false;
-      }
-
-      if (fclose(f) == EOF) {
-        set_error_from_errno(error, "Unable to close");
-        return false;
-      }
-
-      unload();
-      return load(filename, prefault, error);
-    }
-  }
-
   void reinitialize() {
-    _fd = 0;
     _nodes = NULL;
     _loaded = false;
     _n_items = 0;
     _n_nodes = 0;
     _nodes_size = 0;
-    _on_disk = false;
     _seed = Random::default_seed;
     _roots.clear();
   }
 
   void unload() {
-    if (_on_disk && _fd) {
-      close(_fd);
-      munmap(_nodes, _s * _nodes_size);
-    } else {
-      if (_fd) {
-        // we have mmapped data
-        close(_fd);
-        munmap(_nodes, _n_nodes * _s);
-      } else if (_nodes) {
+    if (_nodes) {
         // We have heap allocated data
         free(_nodes);
-      }
     }
     reinitialize();
     if (_verbose) annoylib_showUpdate("unloaded\n");
-  }
-
-  bool load(const char* filename, bool prefault=false, char** error=NULL) {
-    _fd = open(filename, O_RDONLY, (int)0400);
-    if (_fd == -1) {
-      set_error_from_errno(error, "Unable to open");
-      _fd = 0;
-      return false;
-    }
-    off_t size = lseek_getsize(_fd);
-    if (size == -1) {
-      set_error_from_errno(error, "Unable to get size");
-      return false;
-    } else if (size == 0) {
-      set_error_from_errno(error, "Size of file is zero");
-      return false;
-    } else if (size % _s) {
-      // Something is fishy with this index!
-      set_error_from_errno(error, "Index size is not a multiple of vector size. Ensure you are opening using the same metric you used to create the index.");
-      return false;
-    }
-
-    int flags = MAP_SHARED;
-    if (prefault) {
-#ifdef MAP_POPULATE
-      flags |= MAP_POPULATE;
-#else
-      annoylib_showUpdate("prefault is set to true, but MAP_POPULATE is not defined on this platform");
-#endif
-    }
-    _nodes = (Node*)mmap(0, size, PROT_READ, flags, _fd, 0);
-    _n_nodes = (S)(size / _s);
-
-    // Find the roots by scanning the end of the file and taking the nodes with most descendants
-    _roots.clear();
-    S m = -1;
-    for (S i = _n_nodes - 1; i >= 0; i--) {
-      S k = _get(i)->n_descendants;
-      if (m == -1 || k == m) {
-        _roots.push_back(i);
-        m = k;
-      } else {
-        break;
-      }
-    }
-    // hacky fix: since the last root precedes the copy of all roots, delete it
-    if (_roots.size() > 1 && _get(_roots.front())->children[0] == _get(_roots.back())->children[0])
-      _roots.pop_back();
-    _loaded = true;
-    _built = true;
-    _n_items = m;
-    if (_verbose) annoylib_showUpdate("found %lu roots with degree %d\n", _roots.size(), m);
-    return true;
   }
 
   T get_distance(S i, S j) const {
@@ -1199,19 +998,11 @@ protected:
     S new_nodes_size = std::max(n, (S) ((_nodes_size + 1) * reallocation_factor));
     void *old = _nodes;
     
-    if (_on_disk) {
-      if (!remap_memory_and_truncate(&_nodes, _fd, 
-          static_cast<size_t>(_s) * static_cast<size_t>(_nodes_size), 
-          static_cast<size_t>(_s) * static_cast<size_t>(new_nodes_size)) && 
-          _verbose)
-          annoylib_showUpdate("File truncation error\n");
-    } else {
-      _nodes = realloc(_nodes, _s * new_nodes_size);
-      if (!_nodes)
-          throw std::bad_alloc();
-      memset((char *) _nodes + (_nodes_size * _s) / sizeof(char), 0, (new_nodes_size - _nodes_size) * _s);
-    }
-    
+    _nodes = realloc(_nodes, _s * new_nodes_size);
+    if (!_nodes)
+        throw std::bad_alloc();
+    memset((char *) _nodes + (_nodes_size * _s) / sizeof(char), 0, (new_nodes_size - _nodes_size) * _s);
+
     _nodes_size = new_nodes_size;
     if (_verbose) annoylib_showUpdate("Reallocating to %d nodes: old_address=%p, new_address=%p\n", new_nodes_size, old, _nodes);
   }
@@ -1441,7 +1232,6 @@ public:
   void unlock_roots() {}
 };
 
-#ifdef ANNOYLIB_MULTITHREADED_BUILD
 class AnnoyIndexMultiThreadedBuildPolicy {
 private:
   std::shared_timed_mutex nodes_mutex;
@@ -1505,9 +1295,5 @@ public:
     roots_mutex.unlock();
   }
 };
-#endif
 
 }
-
-#endif
-// vim: tabstop=2 shiftwidth=2
