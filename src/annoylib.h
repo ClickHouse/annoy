@@ -775,7 +775,6 @@ class AnnoyIndexInterface {
   virtual void get_nns_by_vector(const T* w, size_t n, int search_k, vector<S>* result, vector<T>* distances) const = 0;
   virtual S get_n_items() const = 0;
   virtual S get_n_trees() const = 0;
-  virtual void verbose(bool v) = 0;
   virtual void get_item(S item, T* v) const = 0;
   virtual void set_seed(R q) = 0;
 };
@@ -800,20 +799,18 @@ protected:
   const uint64_t _f;
   size_t _s;
   S _n_items;
-  void* _nodes; // Could either be mmapped, or point to a memory buffer that we reallocate
+  void* _nodes;
   S _n_nodes;
   S _nodes_size;
   vector<S> _roots;
   S _K;
   R _seed;
   bool _loaded;
-  bool _verbose;
   bool _built;
 public:
 
    AnnoyIndex(uint64_t f) : _f(f), _seed(Random::default_seed) {
     _s = offsetof(Node, v) + _f * sizeof(T); // Size of each node
-    _verbose = false;
     _built = false;
     _K = (S) (((size_t) (_s - offsetof(Node, children))) / sizeof(S)); // Max number of descendants to fit into node
     reinitialize(); // Reset everything
@@ -880,8 +877,6 @@ public:
       memcpy(_get(_n_nodes + (S)i), _get(_roots[i]), _s);
     _n_nodes += _roots.size();
 
-    if (_verbose) annoylib_showUpdate("has %d nodes\n", _n_nodes);
-    
     _built = true;
     return true;
   }
@@ -915,7 +910,6 @@ public:
         free(_nodes);
     }
     reinitialize();
-    if (_verbose) annoylib_showUpdate("unloaded\n");
   }
 
   T get_distance(S i, S j) const {
@@ -938,10 +932,6 @@ public:
 
   S get_n_trees() const {
     return (S)_roots.size();
-  }
-
-  void verbose(bool v) {
-    _verbose = v;
   }
 
   void get_item(S item, T* v) const {
@@ -973,8 +963,6 @@ public:
         }
       }
 
-      if (_verbose) annoylib_showUpdate("pass %zd...\n", thread_roots.size());
-
       vector<S> indices;
       threaded_build_policy.lock_shared_nodes();
       for (S i = 0; i < _n_items; i++) {
@@ -1004,7 +992,6 @@ protected:
     memset((char *) _nodes + (_nodes_size * _s) / sizeof(char), 0, (new_nodes_size - _nodes_size) * _s);
 
     _nodes_size = new_nodes_size;
-    if (_verbose) annoylib_showUpdate("Reallocating to %d nodes: old_address=%p, new_address=%p\n", new_nodes_size, old, _nodes);
   }
 
   void _allocate_size(S n, ThreadedBuildPolicy& threaded_build_policy) {
@@ -1108,10 +1095,6 @@ protected:
 
     // If we didn't find a hyperplane, just randomize sides as a last option
     while (_split_imbalance(children_indices[0], children_indices[1]) > 0.99) {
-      if (_verbose)
-        annoylib_showUpdate("\tNo hyperplane found (left has %ld children, right has %ld children)\n",
-          children_indices[0].size(), children_indices[1].size());
-
       children_indices[0].clear();
       children_indices[1].clear();
 
